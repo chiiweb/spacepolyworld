@@ -11,7 +11,11 @@ var Colors = {
 	asteroid1: 0x8a7f76,
 	asteroid2: 0x6f6259,
 	asteroid3: 0x9c8d7c,
-	laser: 0x7CFC00
+	laser: 0x7CFC00,
+	enemyHull: 0x8a2f3d,
+	enemyHullDark: 0x4a1620,
+	enemyGlass: 0xff5e62,
+	enemyLaser: 0xff3355
 };
 
 var shipColors = [
@@ -196,6 +200,23 @@ var RocketShip = function () {
 	canopy.castShadow = true;
 	this.mesh.add(canopy);
 
+	// Front windshield for cockpit view
+	this.cockpitGlass = new THREE.Mesh(
+		new THREE.BoxGeometry(24, 14, 2.5),
+		new THREE.MeshPhongMaterial({
+			color: 0x9fe8ff,
+			transparent: true,
+			opacity: 0.28,
+			emissive: 0x183a4a,
+			shininess: 90,
+			specular: 0xffffff,
+			side: THREE.DoubleSide
+		})
+	);
+	this.cockpitGlass.position.set(0, 12, 39);
+	this.cockpitGlass.castShadow = true;
+	this.mesh.add(this.cockpitGlass);
+
 	// Blaster cannons mounted on the wingtips
 	var matCannon = new THREE.MeshPhongMaterial({ color: Colors.darkMetal, shading: THREE.FlatShading });
 	var geomCannon = new THREE.CylinderGeometry(3.4, 3.4, 40, 8);
@@ -243,7 +264,7 @@ RocketShip.prototype.recolor = function (hex) {
 
 RocketShip.prototype.cannonWorldPos = function (which) {
 	var cannon = which === 'L' ? this.cannonL : this.cannonR;
-	var v = new THREE.Vector3(20, 0, 0);
+	var v = new THREE.Vector3(0, 0, 24);
 	cannon.localToWorld(v);
 	return v;
 };
@@ -256,16 +277,21 @@ function createShip() {
 	ship.mesh.position.set(0, 130, 0);
 	ship.mesh.rotation.set(0, Math.PI, 0);
 	scene.add(ship.mesh);
+
+	var engineGlow = new THREE.PointLight(0xffa23c, 1.4, 220, 2);
+	engineGlow.position.set(0, 0, -70);
+	ship.mesh.add(engineGlow);
 }
 
 // ---------------------------------------------------------------------
 // Asteroids
 // ---------------------------------------------------------------------
-var ASTEROID_COUNT = 16;
+var ASTEROID_COUNT = 10;
 var asteroids = [];
 var PLAY_X = 190, PLAY_Y_MIN = 30, PLAY_Y_MAX = 240;
 var SPAWN_Z = -2200;
 var DESPAWN_Z = 260;
+var auroraGroup, auroraBands = [], auroraObstacles = [];
 
 function makeAsteroidMesh(radius) {
 	var geom = new THREE.IcosahedronGeometry(radius, 0);
@@ -285,7 +311,7 @@ function makeAsteroidMesh(radius) {
 }
 
 function currentAsteroidSpeed() {
-	return 6 + Math.min(10, elapsedTime * 0.08);
+	return 4.2 + Math.min(6.8, elapsedTime * 0.04);
 }
 
 function spawnAsteroid(a, initialSpread) {
@@ -313,6 +339,56 @@ function createAsteroidField() {
 		spawnAsteroid(a, true);
 		asteroids.push(a);
 	}
+}
+
+function createAuroraMap() {
+	auroraGroup = new THREE.Object3D();
+
+	for (var i = 0; i < 6; i++) {
+		var band = new THREE.Mesh(
+			new THREE.PlaneGeometry(900, 320),
+			new THREE.MeshBasicMaterial({
+				color: i % 2 === 0 ? 0x5bf2ff : 0xb66cff,
+				transparent: true,
+				opacity: 0.16 + (i % 3) * 0.04,
+				side: THREE.DoubleSide,
+				depthWrite: false
+			})
+		);
+		band.position.set(0, 90 + i * 18, -900 - i * 260);
+		band.rotation.x = -Math.PI / 2.2;
+		band.rotation.z = (i % 2 === 0 ? 1 : -1) * (Math.PI / 10);
+		auroraGroup.add(band);
+		auroraBands.push(band);
+	}
+
+	for (var j = 0; j < 4; j++) {
+		var ring = new THREE.Mesh(
+			new THREE.TorusGeometry(34 + j * 10, 1.3, 8, 24),
+			new THREE.MeshBasicMaterial({
+				color: j % 2 === 0 ? 0x7cf7ff : 0x9b5de5,
+				transparent: true,
+				opacity: 0.8,
+				depthWrite: false
+			})
+		);
+		ring.position.set((j - 1.5) * 120, 90 + j * 20, -1200 - j * 360);
+		ring.rotation.x = Math.PI / 2;
+		auroraGroup.add(ring);
+
+		var crystal = new THREE.Mesh(
+			new THREE.BoxGeometry(12, 24, 12),
+			new THREE.MeshPhongMaterial({ color: 0x7cf7ff, emissive: 0x1b4d6b, shading: THREE.FlatShading })
+		);
+		crystal.position.set((j - 1.5) * 120, 90 + j * 20, -1180 - j * 360);
+		crystal.userData = { drift: (j - 1.5) * 0.6, swing: 0.015 + j * 0.003 };
+		auroraGroup.add(crystal);
+
+		auroraObstacles.push({ mesh: ring, type: 'ring', radius: 42 + j * 8, phase: j * 0.7, yBase: 90 + j * 20, xBase: (j - 1.5) * 120, zBase: -1200 - j * 360 });
+		auroraObstacles.push({ mesh: crystal, type: 'crystal', radius: 18, phase: j * 0.4, yBase: 90 + j * 20, xBase: (j - 1.5) * 120, zBase: -1180 - j * 360 });
+	}
+
+	scene.add(auroraGroup);
 }
 
 // ---------------------------------------------------------------------
@@ -361,7 +437,7 @@ function updateLasers() {
 			var dy = a.mesh.position.y - bolt.position.y;
 			var dz = a.mesh.position.z - bolt.position.z;
 			var dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-			if (dist < a.radius * a.mesh.scale.x + 8) {
+			if (dist < a.radius * a.mesh.scale.x + 12) {
 				spawnExplosion(a.mesh.position, 0xffcc66, 1.4);
 				spawnAsteroid(a, false);
 				score += 40;
@@ -369,9 +445,214 @@ function updateLasers() {
 				break;
 			}
 		}
+		if (!hit) {
+			for (var k = 0; k < enemies.length; k++) {
+				var en = enemies[k];
+				var edx = en.mesh.position.x - bolt.position.x;
+				var edy = en.mesh.position.y - bolt.position.y;
+				var edz = en.mesh.position.z - bolt.position.z;
+				var edist = Math.sqrt(edx * edx + edy * edy + edz * edz);
+				if (edist < en.radius) {
+					spawnExplosion(en.mesh.position, 0xff5e62, 1.8);
+					spawnEnemy(en, false);
+					score += 90;
+					showAlert('Enemy destroyed!');
+					hit = true;
+					break;
+				}
+			}
+		}
 		if (hit) {
 			scene.remove(bolt);
 			lasers.splice(i, 1);
+		}
+	}
+}
+
+// ---------------------------------------------------------------------
+// Enemy interceptor ships
+// ---------------------------------------------------------------------
+var EnemyShip = function () {
+	this.mesh = new THREE.Object3D();
+	var matHull = new THREE.MeshPhongMaterial({ color: Colors.enemyHull, shading: THREE.FlatShading });
+	var matDark = new THREE.MeshPhongMaterial({ color: Colors.enemyHullDark, shading: THREE.FlatShading });
+
+	// Flattened wedge-shaped fuselage
+	var geomBody = new THREE.CylinderGeometry(2, 15, 60, 4, 1);
+	geomBody.applyMatrix(new THREE.Matrix4().makeRotationX(Math.PI / 2));
+	geomBody.applyMatrix(new THREE.Matrix4().makeRotationZ(Math.PI / 4));
+	var body = new THREE.Mesh(geomBody, matHull);
+	body.scale.set(1, 0.55, 1);
+	body.castShadow = true;
+	body.receiveShadow = true;
+	this.mesh.add(body);
+
+	// Swept-back wings
+	var geomWing = new THREE.BoxGeometry(58, 3, 26, 1, 1, 1);
+	var wing = new THREE.Mesh(geomWing, matDark);
+	wing.position.set(0, 0, -6);
+	wing.castShadow = true;
+	this.mesh.add(wing);
+
+	// Twin tail stabilizers
+	var geomStab = new THREE.BoxGeometry(4, 16, 14);
+	var stabL = new THREE.Mesh(geomStab, matDark);
+	stabL.position.set(-22, 8, -18);
+	var stabR = new THREE.Mesh(geomStab, matDark);
+	stabR.position.set(22, 8, -18);
+	this.mesh.add(stabL);
+	this.mesh.add(stabR);
+
+	// Glowing cockpit visor
+	var geomVisor = new THREE.SphereGeometry(9, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2);
+	var matVisor = new THREE.MeshPhongMaterial({ color: Colors.enemyGlass, emissive: 0x4a0f14, transparent: true, opacity: .85, shading: THREE.FlatShading });
+	var visor = new THREE.Mesh(geomVisor, matVisor);
+	visor.rotation.x = Math.PI;
+	visor.position.set(0, 3, 20);
+	this.mesh.add(visor);
+
+	// Nose-mounted cannon
+	var matCannon = new THREE.MeshPhongMaterial({ color: 0x1a1c22, shading: THREE.FlatShading });
+	var geomCannon = new THREE.CylinderGeometry(2.6, 2.6, 22, 6);
+	geomCannon.applyMatrix(new THREE.Matrix4().makeRotationX(Math.PI / 2));
+	var cannon = new THREE.Mesh(geomCannon, matCannon);
+	cannon.position.set(0, -2, 34);
+	this.mesh.add(cannon);
+
+	// Twin engine glow
+	var geomEngine = new THREE.CylinderGeometry(6, 6, 10, 8);
+	geomEngine.applyMatrix(new THREE.Matrix4().makeRotationX(Math.PI / 2));
+	var matEngine = new THREE.MeshBasicMaterial({ color: 0xff8a3c, transparent: true, opacity: .9 });
+	this.engineL = new THREE.Mesh(geomEngine, matEngine);
+	this.engineL.position.set(-16, 0, -28);
+	this.mesh.add(this.engineL);
+	this.engineR = this.engineL.clone();
+	this.engineR.position.x = 16;
+	this.mesh.add(this.engineR);
+
+	this.mesh.rotation.y = Math.PI;
+};
+
+var enemies = [];
+var enemyLasers = [];
+var ENEMY_SPEED_MIN = 5.6;
+var ENEMY_LASER_SPEED = 22;
+var enemyFireCooldownGlobal = 0;
+
+function spawnEnemy(e, initialSpread) {
+	if (e.mesh) scene.remove(e.mesh);
+	var ship2 = new EnemyShip();
+	e.mesh = ship2.mesh;
+	e.engineL = ship2.engineL;
+	e.engineR = ship2.engineR;
+	e.radius = 26;
+	e.mesh.position.set(
+		(Math.random() * 2 - 1) * PLAY_X,
+		PLAY_Y_MIN + Math.random() * (PLAY_Y_MAX - PLAY_Y_MIN),
+		initialSpread ? SPAWN_Z - Math.random() * 1800 : SPAWN_Z - 400 - Math.random() * 400
+	);
+	var s = 0.9 + Math.random() * 0.3;
+	e.mesh.scale.set(s, s, s);
+	e.speed = ENEMY_SPEED_MIN + Math.random() * 2 + level * 0.25;
+	e.fireCooldown = 1.5 + Math.random() * 2;
+	e.weaveOffset = Math.random() * Math.PI * 2;
+	e.weaveSpeed = 0.5 + Math.random() * 0.4;
+	e.hitFlash = 0;
+	scene.add(e.mesh);
+}
+
+function createEnemyField() {
+	var count = 3;
+	for (var i = 0; i < count; i++) {
+		var e = {};
+		spawnEnemy(e, true);
+		enemies.push(e);
+	}
+}
+
+function fireEnemyLaser(enemy) {
+	var geom = new THREE.CylinderGeometry(1.8, 1.8, 22, 6);
+	geom.applyMatrix(new THREE.Matrix4().makeRotationX(Math.PI / 2));
+	var mat = new THREE.MeshBasicMaterial({ color: Colors.enemyLaser });
+	var bolt = new THREE.Mesh(geom, mat);
+	bolt.position.copy(enemy.mesh.position);
+	bolt.position.z += 30 * enemy.mesh.scale.z;
+	enemyLasers.push(bolt);
+	scene.add(bolt);
+}
+
+function updateEnemies(dt) {
+	for (var i = 0; i < enemies.length; i++) {
+		var e = enemies[i];
+		var p = e.mesh.position;
+
+		// Drift toward an intercept course with the player
+		var targetX = ship.mesh.position.x + Math.sin(elapsedTime * e.weaveSpeed + e.weaveOffset) * 60;
+		var targetY = ship.mesh.position.y + Math.cos(elapsedTime * e.weaveSpeed * 0.7 + e.weaveOffset) * 30;
+		p.x += (targetX - p.x) * 0.01;
+		p.y += (targetY - p.y) * 0.01;
+		p.z += e.speed + (boostActive ? 1.0 : 0);
+
+		e.mesh.rotation.z = (targetX - p.x) * -0.01;
+		e.mesh.rotation.x = Math.PI + (p.y - targetY) * 0.004;
+
+		var pulse = 1 + Math.sin(elapsedTime * 16 + e.weaveOffset) * 0.2;
+		e.engineL.scale.set(pulse, 1, pulse);
+		e.engineR.scale.set(pulse, 1, pulse);
+
+		if (e.hitFlash > 0) {
+			e.hitFlash -= dt;
+		}
+
+		if (p.z > DESPAWN_Z) {
+			spawnEnemy(e, false);
+			continue;
+		}
+
+		if (gameState === 'playing') {
+			e.fireCooldown -= dt;
+			var dxToShip = p.x - ship.mesh.position.x;
+			var dzToShip = p.z - ship.mesh.position.z;
+			if (e.fireCooldown <= 0 && Math.abs(dxToShip) < 90 && dzToShip < -30 && dzToShip > SPAWN_Z * 0.5) {
+				fireEnemyLaser(e);
+				e.fireCooldown = 2.2 + Math.random() * 1.6 - level * 0.05;
+			}
+
+			var dx = p.x - ship.mesh.position.x;
+			var dy = p.y - ship.mesh.position.y;
+			var dz = p.z - ship.mesh.position.z;
+			var dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+			if (dist < e.radius + 26) {
+				spawnExplosion(p, 0xffb347, 1.6);
+				spawnEnemy(e, false);
+				triggerGameOver();
+			}
+		}
+	}
+}
+
+function updateEnemyLasers(dt) {
+	for (var i = enemyLasers.length - 1; i >= 0; i--) {
+		var bolt = enemyLasers[i];
+		bolt.position.z += ENEMY_LASER_SPEED;
+
+		if (bolt.position.z > DESPAWN_Z + 100) {
+			scene.remove(bolt);
+			enemyLasers.splice(i, 1);
+			continue;
+		}
+
+		if (gameState === 'playing') {
+			var dx = bolt.position.x - ship.mesh.position.x;
+			var dy = bolt.position.y - ship.mesh.position.y;
+			var dz = bolt.position.z - ship.mesh.position.z;
+			var dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+			if (dist < 22) {
+				scene.remove(bolt);
+				enemyLasers.splice(i, 1);
+				spawnExplosion(ship.mesh.position, 0x7cf7ff, 1);
+				triggerGameOver();
+			}
 		}
 	}
 }
@@ -446,9 +727,18 @@ var joystickCenter = { x: 0, y: 0 };
 var joystickBounds = null;
 var spaceHeld = false;
 
+var shakeTime = 0;
+var shakeStrength = 0;
+var cockpitQuatInit = false;
+
+function triggerShake(strength, duration) {
+	shakeStrength = strength;
+	shakeTime = duration;
+}
+
 var cameraMode = 'follow';
 var cameraViewIndex = 0;
-var cameraViews = ['follow', 'chase'];
+var cameraViews = ['follow', 'chase', 'cockpit'];
 
 function loadBestScore() {
 	try {
@@ -492,11 +782,12 @@ function triggerGameOver() {
 	lives -= 1;
 	spawnExplosion(ship.mesh.position, 0xff5533, 2.2);
 	ship.mesh.visible = false;
+	triggerShake(6, 0.4);
 	updateHud();
 	if (lives > 0) {
 		setTimeout(function () {
 			if (gameState === 'playing') {
-				ship.mesh.visible = true;
+				ship.mesh.visible = cameraMode !== 'cockpit';
 				ship.mesh.position.set(0, 130, 0);
 				ship.mesh.rotation.set(0, Math.PI, 0);
 			}
@@ -528,7 +819,7 @@ function restartGame() {
 	waveTimer = 0;
 	asteroidSpawnCooldown = 0;
 	nextWaveAt = 3;
-	ship.mesh.visible = true;
+	ship.mesh.visible = cameraMode !== 'cockpit';
 	ship.mesh.position.set(0, 130, 0);
 	ship.mesh.rotation.set(0, Math.PI, 0);
 
@@ -543,6 +834,13 @@ function restartGame() {
 		scene.remove(explosions[e]);
 	}
 	explosions = [];
+	for (var m = 0; m < enemies.length; m++) {
+		spawnEnemy(enemies[m], true);
+	}
+	for (var el = enemyLasers.length - 1; el >= 0; el--) {
+		scene.remove(enemyLasers[el]);
+	}
+	enemyLasers = [];
 
 	var overlay = document.getElementById('game-over');
 	if (overlay) overlay.classList.remove('visible');
@@ -573,14 +871,15 @@ function updateShip() {
 	var targetY = normalize(controlY, -.75, .75, PLAY_Y_MIN + 10, PLAY_Y_MAX - 10);
 	var targetX = normalize(controlX, -.75, .75, -PLAY_X + 30, PLAY_X - 30);
 	var forwardBoost = boostActive ? 1.8 : 1;
+	var turnEase = 0.04;
 
-	ship.mesh.position.y += (targetY - ship.mesh.position.y) * 0.12;
-	ship.mesh.position.x += (targetX - ship.mesh.position.x) * 0.12;
-	ship.mesh.position.z -= 0.8 * forwardBoost;
+	ship.mesh.position.y += (targetY - ship.mesh.position.y) * turnEase;
+	ship.mesh.position.x += (targetX - ship.mesh.position.x) * turnEase;
+	ship.mesh.position.z -= 0.7 * forwardBoost;
 
-	ship.mesh.rotation.z = (targetX - ship.mesh.position.x) * -0.025;
-	ship.mesh.rotation.x = (ship.mesh.position.y - targetY) * 0.01;
-	ship.mesh.rotation.y = Math.PI + (targetX - ship.mesh.position.x) * 0.01;
+	ship.mesh.rotation.z = (targetX - ship.mesh.position.x) * -0.008;
+	ship.mesh.rotation.x = (ship.mesh.position.y - targetY) * 0.003;
+	ship.mesh.rotation.y = Math.PI + (targetX - ship.mesh.position.x) * 0.003;
 
 	var pulse = 1 + Math.sin(elapsedTime * 20) * 0.15 + (boostActive ? 0.2 : 0);
 	ship.flameCore.scale.set(pulse, 1, pulse);
@@ -601,12 +900,18 @@ function updateAsteroids() {
 	waveTimer += 0.016;
 	if (waveTimer > nextWaveAt) {
 		waveTimer = 0;
-		nextWaveAt = Math.max(2.2, 4 - level * 0.3);
+		nextWaveAt = Math.max(3.2, 5.4 - level * 0.18);
 		showAlert('Wave incoming!');
-		for (var s = 0; s < Math.min(10 + level * 2, 24); s++) {
+		for (var s = 0; s < Math.min(5 + level, 12); s++) {
 			var extra = {};
 			spawnAsteroid(extra, true);
 			asteroids.push(extra);
+		}
+		if (level >= 2 && enemies.length < Math.min(3 + Math.floor(level / 2), 7)) {
+			var extraEnemy = {};
+			spawnEnemy(extraEnemy, true);
+			enemies.push(extraEnemy);
+			showAlert('Enemy squadron incoming!');
 		}
 	}
 
@@ -630,8 +935,40 @@ function updateAsteroids() {
 			var dy = a.mesh.position.y - ship.mesh.position.y;
 			var dz = a.mesh.position.z - ship.mesh.position.z;
 			var dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-			if (dist < a.radius * a.mesh.scale.x + 24) {
+			if (dist < a.radius * a.mesh.scale.x + 28) {
 				triggerGameOver();
+			}
+		}
+	}
+}
+
+function updateAuroraHazards(dt) {
+	if (auroraGroup) {
+		auroraGroup.rotation.y += 0.00018 * dt;
+		for (var i = 0; i < auroraBands.length; i++) {
+			var band = auroraBands[i];
+			band.material.opacity = 0.12 + 0.04 * Math.sin(elapsedTime * 0.8 + i * 0.8);
+		}
+	}
+
+	for (var i = 0; i < auroraObstacles.length; i++) {
+		var obstacle = auroraObstacles[i];
+		obstacle.mesh.rotation.y += 0.01 + i * 0.001;
+		obstacle.mesh.rotation.z += 0.006;
+		obstacle.mesh.position.x = obstacle.xBase + Math.sin(elapsedTime * 0.8 + obstacle.phase) * 18;
+		obstacle.mesh.position.y = obstacle.yBase + Math.sin(elapsedTime * 1.1 + obstacle.phase) * 10;
+		obstacle.mesh.position.z = obstacle.zBase + Math.cos(elapsedTime * 0.7 + obstacle.phase) * 8;
+
+		if (gameState === 'playing') {
+			var dx = obstacle.mesh.position.x - ship.mesh.position.x;
+			var dy = obstacle.mesh.position.y - ship.mesh.position.y;
+			var dz = obstacle.mesh.position.z - ship.mesh.position.z;
+			var dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+			if (dist < obstacle.radius + 16) {
+				spawnExplosion(ship.mesh.position, 0x7cf7ff, 1.1);
+				ship.mesh.position.x += Math.sin(obstacle.phase) * 10;
+				ship.mesh.position.y += Math.cos(obstacle.phase) * 10;
+				score += 20;
 			}
 		}
 	}
@@ -640,9 +977,21 @@ function updateAsteroids() {
 function toggleCameraView() {
 	cameraViewIndex = (cameraViewIndex + 1) % cameraViews.length;
 	cameraMode = cameraViews[cameraViewIndex];
+	cockpitQuatInit = false;
 	var cycleButton = document.getElementById('view-cycle');
 	if (cycleButton) {
-		cycleButton.textContent = 'View: ' + (cameraMode === 'follow' ? 'Follow' : 'Chase');
+		var label = cameraMode === 'follow' ? 'Follow' : (cameraMode === 'chase' ? 'Chase' : 'Cockpit');
+		cycleButton.textContent = 'View: ' + label;
+	}
+	var cockpitOverlay = document.getElementById('cockpit-overlay');
+	if (cockpitOverlay) {
+		if (cameraMode === 'cockpit') {
+			cockpitOverlay.classList.add('visible');
+			ship.mesh.visible = false;
+		} else {
+			cockpitOverlay.classList.remove('visible');
+			if (gameState === 'playing') ship.mesh.visible = true;
+		}
 	}
 }
 
@@ -650,15 +999,51 @@ function updateCamera() {
 	if (!ship || !camera) return;
 	var p = ship.mesh.position;
 	if (cameraMode === 'chase') {
+		camera.fov = 65;
 		camera.position.x = p.x * 0.2;
 		camera.position.y = p.y + 30;
 		camera.position.z = p.z + 140;
+		camera.lookAt(new THREE.Vector3(p.x, p.y, p.z - 260));
+	} else if (cameraMode === 'cockpit') {
+		camera.fov = 72;
+		// Seat the camera right where the canopy glass sits, tucked
+		// just behind the nose.
+		var shipScale = ship.mesh.scale.x;
+		var localSeat = new THREE.Vector3(0, 12 * shipScale, 18 * shipScale);
+		var seatWorld = ship.mesh.localToWorld(localSeat.clone());
+		camera.position.copy(seatWorld);
+		camera.up.set(0, 1, 0);
+
+		// Only carry through a damped fraction of the ship's bank/pitch/yaw
+		// so hard turns don't whip the cockpit view around — you still feel
+		// the turn, but the horizon stays readable.
+		var dampedEuler = new THREE.Euler(
+			ship.mesh.rotation.x * 0.35,
+			Math.PI + (ship.mesh.rotation.y - Math.PI) * 0.4,
+			ship.mesh.rotation.z * 0.3,
+			'XYZ'
+		);
+		var targetQuat = new THREE.Quaternion().setFromEuler(dampedEuler);
+		targetQuat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
+		if (!cockpitQuatInit) {
+			camera.quaternion.copy(targetQuat);
+			cockpitQuatInit = true;
+		} else {
+			camera.quaternion.slerp(targetQuat, 0.12);
+		}
 	} else {
+		camera.fov = 65;
 		camera.position.x = p.x * 0.15;
 		camera.position.y = p.y + 38;
 		camera.position.z = p.z + 180;
+		camera.lookAt(new THREE.Vector3(p.x, p.y, p.z - 260));
 	}
-	camera.lookAt(new THREE.Vector3(p.x, p.y, p.z - 260));
+	if (shakeTime > 0) {
+		var falloff = shakeTime / 0.4;
+		camera.position.x += (Math.random() - 0.5) * shakeStrength * falloff;
+		camera.position.y += (Math.random() - 0.5) * shakeStrength * falloff;
+	}
+	camera.updateProjectionMatrix();
 }
 
 function loop() {
@@ -691,9 +1076,13 @@ function loop() {
 
 		updateShip();
 		updateAsteroids();
+		updateEnemies(dt);
 		updateLasers();
+		updateEnemyLasers(dt);
 	}
 	updateExplosions(dt);
+	updateAuroraHazards(dt);
+	if (shakeTime > 0) shakeTime -= dt;
 	updateCamera();
 
 	if (stars) stars.rotation.y += 0.0003;
@@ -832,7 +1221,9 @@ function init() {
 	createShip();
 	createStars();
 	createNebula();
+	createAuroraMap();
 	createAsteroidField();
+	createEnemyField();
 
 	document.addEventListener('mousemove', handleMouseMove, false);
 	document.addEventListener('touchstart', handleTouchStart, { passive: false });
