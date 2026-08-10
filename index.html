@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rocket Blaster</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Mochiy+Pop+One&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+    <link rel="icon" type="image/png" href="airplane.png" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="hud">
+      <div class="title-row">
+        <h1>
+          <img src="rocketimg.png" alt="Rocket" class="title-rocket-icon" />
+          Rocket Blaster
+        </h1>
+        <img src="meephappy.png" alt="Happy character" class="title-meephappy-icon" />
+      </div>
+      <p>Mouse, touch, or arrow keys steer. Space / Fire blasts asteroids and fighters. Press V to cycle views (including cockpit). You've got 3 lives and hull armor — but run out of both and it's game over.</p>
+      <div id="score-line">Score: <span id="score">0</span> &nbsp;·&nbsp; Best: <span id="best-score">0</span></div>
+      <div id="level-line">Level: <span id="level-number">1</span> &nbsp;·&nbsp; Boost: <span id="boost-value">100</span>%</div>
+      <div id="controls">
+        <button id="view-cycle">View: Follow</button>
+      </div>
+    </div>
+
+    <div id="joystick">
+      <div id="joystick-handle"></div>
+    </div>
+
+    <div id="mobile-controls">
+      <div id="fire-btn"><span>SPACE</span><small>Fire</small></div>
+      <div id="alt-fire-btn"><span>F</span><small>Mode</small></div>
+      <div id="boost-btn"><span>B</span><small>Boost</small></div>
+    </div>
+
+    <div id="alert-box"></div>
+
+    <div id="cockpit-overlay">
+      <div class="cockpit-glass-tint"></div>
+      <div class="cockpit-glare"></div>
+      <div class="cockpit-strut cockpit-strut-tl"></div>
+      <div class="cockpit-strut cockpit-strut-tr"></div>
+      <div class="cockpit-strut cockpit-strut-bl"></div>
+      <div class="cockpit-strut cockpit-strut-br"></div>
+      <div class="cockpit-reticle">
+        <div class="cockpit-reticle-ring"></div>
+        <div class="cockpit-reticle-cross"></div>
+      </div>
+      <div class="cockpit-dash">
+        <div class="cockpit-dash-light"></div>
+        <div class="cockpit-dash-light"></div>
+        <div class="cockpit-dash-light"></div>
+      </div>
+    </div>
+
+    <div id="game-over">
+      <div id="game-over-panel">
+        <h2>💥 Crashed!</h2>
+        <p>Score: <span id="final-score">0</span></p>
+        <button id="restart-btn">Fly Again</button>
+      </div>
+    </div>
+
+    <div id="world"></div>
+
+    <div id="designer-overlay" class="visible">
+      <div id="designer-panel">
+        <img src="rocketblastertext.png" alt="Rocket Blaster" class="designer-logo" />
+        <h2>Design Your Rocket</h2>
+        <p>Customize your rocket, then press Start Flight.</p>
+
+        <div id="designer-controls">
+          <div class="designer-row">
+            <div class="palette">
+              <button class="color-btn active" data-color="f25346" style="background:#f25346" title="Coral"></button>
+              <button class="color-btn" data-color="4fd8e0" style="background:#4fd8e0" title="Cyan"></button>
+              <button class="color-btn" data-color="9b5de5" style="background:#9b5de5" title="Violet"></button>
+              <button class="color-btn" data-color="ffd23f" style="background:#ffd23f" title="Gold"></button>
+              <button class="color-btn" data-color="06d6a0" style="background:#06d6a0" title="Emerald"></button>
+              <button class="color-btn" data-color="ff77a8" style="background:#ff77a8" title="Pink"></button>
+              <button class="color-btn" data-color="7fe0a5" style="background:#7fe0a5" title="Mint"></button>
+              <button class="color-btn" data-color="3a6cff" style="background:#3a6cff" title="Blue"></button>
+              <button class="color-btn" data-color="b07c1f" style="background:#b07c1f" title="Bronze"></button>
+            </div>
+          </div>
+          <div class="designer-row">
+            <label>Canopy: <input id="canopy-color" type="color" value="#8fd8ff"></label>
+            <label>Hull size: <input id="hull-size" type="range" min="0.45" max="1.1" step="0.01" value="0.62"></label>
+          </div>
+          <div class="designer-row">
+            <label>Fin scale: <input id="fin-scale" type="range" min="0.6" max="1.6" step="0.01" value="1"></label>
+            <label>Stripe: <input id="stripe-enable" type="checkbox"></label>
+            <label>Stripe color: <input id="stripe-color" type="color" value="#ffffff"></label>
+          </div>
+        
+        <div class="designer-actions">
+          <button id="randomize-design">Randomize</button>
+          <button id="start-flight">Start Flight</button>
+        </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="jukebox-radio">
+      <div class="radio-shell">
+        <div class="radio-antenna"></div>
+        <div class="radio-speaker">
+          <div class="speaker-grill"></div>
+        </div>
+        <div class="radio-panel">
+          <div class="radio-screen">
+            <div class="jukebox-marquee">J U K E B O X</div>
+          </div>
+          <div class="radio-controls">
+            <button id="jukebox-toggle">Play</button>
+            <input id="jukebox-volume" type="range" min="0" max="1" step="0.01" value="0.6">
+          </div>
+          <div class="radio-eq">
+            <div class="bar b1"></div>
+            <div class="bar b2"></div>
+            <div class="bar b3"></div>
+            <div class="bar b4"></div>
+          </div>
+        </div>
+        <div class="radio-knobs">
+          <div class="knob"></div>
+          <div class="knob small"></div>
+        </div>
+        <div class="cassette">
+          <div class="cassette-door"></div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r71/three.min.js"></script>
+    <audio id="jukebox" src="space.mp3" preload="auto"></audio>
+    <script src="script.js"></script>
+  </body>
+</html>
